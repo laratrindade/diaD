@@ -22,3 +22,11 @@ MEDIA_DIR="/caminho/para/pasta" python server.py
 
 ## Dica
 Se não definires `MEDIA_DIR`, o app tenta usar `./media` dentro do projeto.
+
+
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python3 server.py
+lsof -ti:8000 | xargs kill -9 
