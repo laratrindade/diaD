@@ -21,8 +21,45 @@ streamlit run app.py
 - Vídeos: `.mp4`, `.webm`, `.ogg`, `.mov`, `.m4v`
 
 ## Deploy no Streamlit Cloud
-1. Garante que `app.py`, `requirements.txt` e a pasta `media/` estão no repositório.
+1. Garante que `app.py` e `requirements.txt` estão no repositório.
 2. Aponta o Streamlit Cloud para este repo e faz deploy.
+
+## Google Drive (pasta privada)
+Este app pode ler fotos e vídeos diretamente de uma pasta privada no Google Drive.
+
+### Passos
+1. Cria uma Service Account no Google Cloud e faz download do JSON.
+2. Partilha a pasta do Drive com o email da Service Account, com acesso de leitor.
+3. Define o `GDRIVE_FOLDER_ID` com o ID da pasta.
+4. Guarda as credenciais no Streamlit Cloud em `Secrets` como `gcp_service_account`.
+5. Guarda o ID da pasta como `gdrive_folder_id` em `Secrets`.
+6. Se a pasta estiver num Shared Drive, adiciona também `gdrive_shared_drive_id`.
+
+### Exemplo de Secrets (Streamlit Cloud)
+```toml
+gcp_service_account = { 
+  "type": "service_account",
+  "project_id": "teu-projeto",
+  "private_key_id": "…",
+  "private_key": "-----BEGIN PRIVATE KEY-----\\n…\\n-----END PRIVATE KEY-----\\n",
+  "client_email": "teu-sa@teu-projeto.iam.gserviceaccount.com",
+  "client_id": "…",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "…"
+}
+gdrive_folder_id = "ID_DA_TUA_PASTA"
+gdrive_shared_drive_id = "ID_DO_SHARED_DRIVE"
+```
+
+### Variáveis de ambiente (opcional)
+- `GDRIVE_FOLDER_ID`: ID da pasta no Drive.
+- `GDRIVE_SHARED_DRIVE_ID`: ID do Shared Drive (se aplicável).
+- `GCP_SERVICE_ACCOUNT_JSON`: JSON completo da service account, se não usares `Secrets`.
 
 ## Nota
 Os ficheiros são incorporados como `data:` URLs para manter o comportamento sem servidor externo. Para media muito pesado, pode ficar lento; nesse caso, avisa-me que otimizo.
+
+
+debug_media = true
