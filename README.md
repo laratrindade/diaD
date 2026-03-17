@@ -1,32 +1,38 @@
 # Dia do Pai - Slideshow Local
 
-Pequeno site local em Python (Flask) que lê fotos e vídeos de uma pasta específica e reproduz aleatoriamente.
+App local em Python (Streamlit) que lê fotos e videos de uma pasta especifica, permite upload, e reproduz aleatoriamente.
 
 ## Requisitos
 - Python 3.9+
-- `pip install flask`
+- `pip install -r requirements.txt`
 
 ## Como usar
-1. Cria uma pasta com as tuas fotos e vídeos (ex: `/Users/laratrindade/MediaPai`).
-2. Inicia o servidor definindo a pasta:
+1. Cria uma pasta com as tuas fotos e videos (ex: `/Users/laratrindade/MediaPai`).
+2. Inicia o app definindo a pasta:
 
 ```bash
-MEDIA_DIR="/caminho/para/pasta" python server.py
+MEDIA_DIR="/caminho/para/pasta" streamlit run app.py
 ```
 
-3. Abre o browser em `http://localhost:8000`.
+3. Abre o browser no URL que o Streamlit mostrar (ex: `http://localhost:8501`).
 
 ## Extensões suportadas
 - Imagens: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`
-- Vídeos: `.mp4`, `.webm`, `.ogg`, `.mov`, `.m4v`
+- Videos: `.mp4`, `.webm`, `.ogg`, `.mov`, `.m4v`
 
 ## Dica
-Se não definires `MEDIA_DIR`, o app tenta usar `./media` dentro do projeto.
+Se nao definires `MEDIA_DIR`, o app tenta usar `./media` dentro do projeto.
+
+## Uso rapido
+- Envia fotos e videos na secao "Enviar novas midias".
+- Clica em "Proximo aleatorio" para sortear outra midia.
 
 
 
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+streamlit run app.py
+
 python3 server.py
 lsof -ti:8000 | xargs kill -9 
