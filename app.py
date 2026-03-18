@@ -337,9 +337,9 @@ html = f"""
       }}
 
       .frame.playing .overlay {{
-        opacity: 0;
+        opacity: 0 !important;
         transform: translateY(8px);
-        pointer-events: none;
+        pointer-events: none !important;
       }}
 
       .controls {{
@@ -372,9 +372,19 @@ html = f"""
       button#next-order {{ background: #9a7d67; }}
 
       .hint {{
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
         text-align: center;
         color: #6f655d;
         font-size: 14px;
+        background: rgba(255, 252, 248, 0.95);
+        padding: 8px 18px;
+        border-radius: 999px;
+        box-shadow: 0 4px 16px rgba(45, 42, 38, 0.12);
+        white-space: nowrap;
       }}
 
       .debug {{
@@ -518,29 +528,31 @@ html = f"""
 
       function scheduleNext(delay) {{
         if (timer) window.clearTimeout(timer);
-        timer = window.setTimeout(() => {{ if (isPlaying) playNext(); }}, delay);
+        timer = window.setTimeout(() => {{
+          console.log("scheduleNext fired, isPlaying=", isPlaying);
+          if (isPlaying) playNext();
+        }}, delay);
       }}
 
       async function playItem(item) {{
+        if (timer) window.clearTimeout(timer);
         showHint("A carregar...");
         try {{
           const blobUrl = await fetchDriveFile(item.id, item.mime);
+          if (timer) window.clearTimeout(timer);
           clearStage();
           frame.classList.add("playing");
-          overlay.style.opacity = "0";
-          overlay.style.pointerEvents = "none";
           if (item.type === "video") {{
-            const source = document.createElement("source");
-            source.src = blobUrl;
-            if (item.mime) source.type = item.mime;
-            video.appendChild(source);
             video.muted = isMuted;
-            video.load();
             video.classList.add("show");
-            video.play().catch(err => {{
-              showHint("Erro ao reproduzir vídeo: " + (err.name || "erro"));
-            }});
+            video.src = blobUrl;
+            video.load();
             showHint("");
+            video.play().catch(err => {{
+              if (err.name !== "AbortError") {{
+                showHint("Erro: " + err.name);
+              }}
+            }});
           }} else {{
             const img = new Image();
             img.onload = () => {{
@@ -549,7 +561,14 @@ html = f"""
               scheduleNext(IMAGE_DURATION_MS);
               showHint("");
             }};
+            img.onerror = () => scheduleNext(IMAGE_DURATION_MS);
             img.src = blobUrl;
+            if (img.complete) {{
+              photo.src = blobUrl;
+              photo.classList.add("show");
+              scheduleNext(IMAGE_DURATION_MS);
+              showHint("");
+            }}
           }}
         }} catch(err) {{
           showHint("Erro ao carregar: " + err.message);
@@ -582,7 +601,6 @@ html = f"""
 
       pauseBtn.addEventListener("click", () => {{
         isPlaying = false;
-        frame.classList.remove("playing");
         if (timer) window.clearTimeout(timer);
         video.pause();
       }});
