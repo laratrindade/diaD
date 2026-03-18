@@ -63,6 +63,17 @@ html, body, .stApp {height: 100%;}
 div[data-testid="stAppViewContainer"] > .main {padding: 0;}
 div[data-testid="stAppViewContainer"] .block-container {padding-top: 0; padding-bottom: 0;}
 div[data-testid="stAppViewContainer"] {background: radial-gradient(circle at top, #fff8ef 0%, #f6f2ea 50%, #e9e1d6 100%);}
+/* Esconde barra do topo */
+div[data-testid="stStatusWidget"] {display: none !important;}
+div[data-testid="stToolbar"] {display: none !important;}
+div[data-testid="stDecoration"] {display: none !important;}
+div[class*="StatusWidget"] {display: none !important;}
+/* Barra laranja do topo */
+header[data-testid="stHeader"] {display: none !important;}
+div[class*="decoration"] {display: none !important;}
+/* Skeleton loader azul */
+div.stSkeleton {display: none !important;}
+[class*="stSkeleton"] {display: none !important;}
 </style>
 """,
     unsafe_allow_html=True,
@@ -211,8 +222,7 @@ def _parse_data_url(data_url):
     return mime, base64.b64decode(b64)
 
 
-@st.cache_data(show_spinner=False)
-def _load_media_items():
+def _load_media_items(progress_cb=None):
     # Prefer Google Drive if configured
     folder_id = _get_drive_folder_id()
     if folder_id:
@@ -227,7 +237,10 @@ def _load_media_items():
         max_single_bytes = max_single_mb * 1024 * 1024
         total_bytes = 0
         candidates = list(_iter_drive_files(service, folder_id, shared_drive_id=shared_drive_id))
+        total_candidates = len(candidates) if candidates else 1
         for f in candidates:
+            if progress_cb:
+                progress_cb(f, total_candidates)
             mime = f.get("mimeType") or ""
             if not (mime.startswith(GDRIVE_MIME_IMAGE_PREFIX) or mime.startswith(GDRIVE_MIME_VIDEO_PREFIX)):
                 # Fallback: check extension if Drive mime isn't helpful
@@ -300,12 +313,24 @@ def _load_media_items():
 
 _load_error = None
 folder_id_for_debug = _get_drive_folder_id()
+loading_placeholder = st.empty()
+progress_placeholder = st.empty()
+
+def _progress_cb(file_info, total):
+    if not total:
+        return
+    if not hasattr(_progress_cb, "count"):
+        _progress_cb.count = 0
+    _progress_cb.count += 1
+
 try:
-    result = _load_media_items()
+    result = _load_media_items(progress_cb=_progress_cb)
 except Exception as exc:
     _load_error = exc
     st.error(f"Erro ao carregar media do Google Drive: {exc}")
     result = {"items": [], "errors": []}
+loading_placeholder.empty()
+progress_placeholder.empty()
 items = result.get("items", [])
 load_errors = result.get("errors", [])
 items_json = json.dumps(items)
@@ -380,6 +405,32 @@ html = f"""
 <!doctype html>
 <html lang="pt">
   <head>
+    <script>
+      (function() {{
+        function hideDecorations() {{
+          try {{
+            const parent = window.parent || window.top;
+            if (!parent || !parent.document) return;
+            const doc = parent.document;
+            const selectors = [
+              '[data-testid="stDecoration"]',
+              '[data-testid="stToolbar"]',
+              '[data-testid="stHeader"]',
+              'header',
+            ];
+            selectors.forEach(sel => {{
+              doc.querySelectorAll(sel).forEach(el => {{
+                el.style.setProperty('display', 'none', 'important');
+              }});
+            }});
+          }} catch(e) {{}}
+        }}
+        hideDecorations();
+        setTimeout(hideDecorations, 100);
+        setTimeout(hideDecorations, 500);
+        setTimeout(hideDecorations, 1000);
+      }})();
+    </script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dia do Pai</title>
@@ -462,7 +513,49 @@ html = f"""
         background: rgba(255, 252, 248, 0.8);
         border-radius: 14px;
         box-shadow: 0 8px 20px rgba(45, 42, 38, 0.1);
-        transition: opacity 0.3s ease, transform 0.3s ease;
+        opacity: 0;
+        transition: opacity 0.6s ease;
+      }}
+
+      .loading {{
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at top, #fff8ef 0%, #f6f2ea 50%, #e9e1d6 100%);
+        border-radius: 16px;
+        gap: 12px;
+        font-size: 15px;
+        color: #6f655d;
+        transition: opacity 0.5s ease;
+      }}
+
+      .loading-bar {{
+        display: block;
+        width: 260px;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(176, 106, 79, 0.25);
+        overflow: hidden;
+      }}
+
+      .loading-bar::after {{
+        content: "";
+        display: block;
+        height: 100%;
+        width: 40%;
+        background: var(--accent);
+        border-radius: 999px;
+        animation: loading-move 1.2s ease-in-out infinite;
+      }}
+
+      @keyframes loading-move {{
+        0% {{ transform: translateX(-10%); }}
+        50% {{ transform: translateX(130%); }}
+        100% {{ transform: translateX(-10%); }}
       }}
 
       .overlay h1 {{
@@ -525,6 +618,22 @@ html = f"""
         font-size: 14px;
       }}
 
+      .loading {{
+        position: absolute;
+        top: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 3;
+        text-align: center;
+        color: #6f655d;
+        font-size: 14px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: rgba(255, 252, 248, 0.95);
+        box-shadow: 0 8px 16px rgba(45, 42, 38, 0.08);
+      }}
+
+
       .debug {{
         display: none;
         padding: 10px 14px;
@@ -550,9 +659,13 @@ html = f"""
     <main class="stage">
       <div class="debug" id="debug" aria-live="polite"></div>
       <div class="frame" id="frame">
+        <div class="loading" id="loading">
+          A carregar uma surpresa muito especial...
+          <span class="loading-bar"></span>
+        </div>
         <img id="photo" alt="" />
         <video id="video" playsinline preload="auto"></video>
-        <div class="overlay">
+        <div class="overlay" id="overlay">
           <h1>Dia do Pai</h1>
           <h3>19/03/2026</h3>
           <p>Memórias que passam ao acaso</p>
@@ -565,7 +678,7 @@ html = f"""
         <button id="next" type="button">Próximo aleatório</button>
         <button id="sound" type="button">Ativar som</button>
       </div>
-      <div class="hint" id="hint"></div>
+      <div class="hint" id="hint">A carregar uma surpresa muito especial...</div>
     </main>
     <script>
       const items = {items_json};
@@ -576,6 +689,8 @@ html = f"""
       const hint = document.getElementById("hint");
       const frame = document.getElementById("frame");
       const debugEl = document.getElementById("debug");
+      const loading = document.getElementById("loading");
+      const overlay = document.getElementById("overlay");
       const playBtn = document.getElementById("play");
       const pauseBtn = document.getElementById("pause");
       const nextOrderBtn = document.getElementById("next-order");
@@ -593,11 +708,31 @@ html = f"""
         hint.textContent = text;
       }}
 
+      function hideLoading() {{
+        if (loading) {{
+          loading.style.opacity = "0";
+          setTimeout(() => {{ loading.style.display = "none"; }}, 500);
+        }}
+        overlay.style.opacity = "1";
+        showHint("Pronto para reproduzir.");
+      }}
+
       function initHint() {{
         if (!items.length) {{
           showHint("Sem media encontrado. Confirma a pasta configurada.");
+          hideLoading();
         }} else {{
-          showHint("Pronto para reproduzir.");
+          const readyFonts = document.fonts && document.fonts.ready
+            ? document.fonts.ready
+            : Promise.resolve();
+          const minWait = new Promise(resolve => setTimeout(resolve, 1500));
+          Promise.all([readyFonts, minWait]).then(() => {{
+            window.requestAnimationFrame(() => {{
+              window.requestAnimationFrame(() => {{
+                hideLoading();
+              }});
+            }});
+          }});
         }}
       }}
 
