@@ -61,5 +61,16 @@ gdrive_shared_drive_id = "ID_DO_SHARED_DRIVE"
 ## Nota
 Os ficheiros são incorporados como `data:` URLs para manter o comportamento sem servidor externo. Para media muito pesado, pode ficar lento; nesse caso, avisa-me que otimizo.
 
+## Performance (carregamento mais rápido)
+Podes limitar o número e o tamanho dos ficheiros pré-carregados para reduzir o tempo de arranque:
+
+```toml
+MAX_PRELOAD_ITEMS = 40
+MAX_TOTAL_MB = 200
+MAX_SINGLE_MB = 60
+```
+
+Estas chaves podem ser colocadas nos `Secrets` (Streamlit Cloud) ou como variáveis de ambiente.
+
 
 debug_media = true

@@ -2,6 +2,7 @@ import base64
 import json
 import mimetypes
 import os
+import random
 from io import BytesIO
 from pathlib import Path
 
@@ -22,6 +23,10 @@ GDRIVE_FOLDER_MIME = "application/vnd.google-apps.folder"
 GDRIVE_FOLDER_ID = None
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+DEFAULT_MAX_ITEMS = 40
+DEFAULT_MAX_TOTAL_MB = 200
+DEFAULT_MAX_SINGLE_MB = 60
+DEFAULT_CACHE_TTL_SECONDS = 21600
 
 
 def _is_debug_media():
@@ -31,6 +36,21 @@ def _is_debug_media():
             return val.strip().lower() in {"1", "true", "yes", "on"}
         return bool(val)
     return os.environ.get("DEBUG_MEDIA", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_int_setting(key, default):
+    if key in st.secrets:
+        try:
+            return int(st.secrets[key])
+        except Exception:
+            return default
+    raw = os.environ.get(key)
+    if raw:
+        try:
+            return int(raw)
+        except Exception:
+            return default
+    return default
 
 st.set_page_config(page_title="Dia do Pai", layout="wide")
 
@@ -108,10 +128,11 @@ def _iter_drive_files(service, folder_id, shared_drive_id=None):
         while True:
             list_kwargs = {
                 "q": query,
-                "fields": "nextPageToken, files(id, name, mimeType, size)",
+                "fields": "nextPageToken, files(id, name, mimeType, size, modifiedTime)",
                 "pageToken": page_token,
                 "supportsAllDrives": True,
                 "includeItemsFromAllDrives": True,
+                "orderBy": "name",
             }
             if shared_drive_id:
                 list_kwargs.update({
@@ -136,10 +157,11 @@ def _list_drive_files_metadata(service, folder_id, shared_drive_id=None, limit=2
     while len(files) < limit:
         list_kwargs = {
             "q": query,
-            "fields": "nextPageToken, files(id, name, mimeType, size)",
+            "fields": "nextPageToken, files(id, name, mimeType, size, modifiedTime)",
             "pageToken": page_token,
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
+            "orderBy": "name",
         }
         if shared_drive_id:
             list_kwargs.update({
@@ -167,6 +189,12 @@ def _download_drive_file(service, file_id):
     return fh.getvalue()
 
 
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL_SECONDS)
+def _download_drive_file_cached(file_id, modified_time):
+    service = _get_drive_service()
+    return _download_drive_file(service, file_id)
+
+
 def _parse_data_url(data_url):
     if not data_url or not data_url.startswith("data:"):
         return None, None
@@ -192,7 +220,14 @@ def _load_media_items():
         shared_drive_id = _get_shared_drive_id()
         items = []
         errors = []
-        for f in _iter_drive_files(service, folder_id, shared_drive_id=shared_drive_id):
+        max_items = _get_int_setting("MAX_PRELOAD_ITEMS", DEFAULT_MAX_ITEMS)
+        max_total_mb = _get_int_setting("MAX_TOTAL_MB", DEFAULT_MAX_TOTAL_MB)
+        max_single_mb = _get_int_setting("MAX_SINGLE_MB", DEFAULT_MAX_SINGLE_MB)
+        max_total_bytes = max_total_mb * 1024 * 1024
+        max_single_bytes = max_single_mb * 1024 * 1024
+        total_bytes = 0
+        candidates = list(_iter_drive_files(service, folder_id, shared_drive_id=shared_drive_id))
+        for f in candidates:
             mime = f.get("mimeType") or ""
             if not (mime.startswith(GDRIVE_MIME_IMAGE_PREFIX) or mime.startswith(GDRIVE_MIME_VIDEO_PREFIX)):
                 # Fallback: check extension if Drive mime isn't helpful
@@ -203,8 +238,21 @@ def _load_media_items():
                     mime, _ = mimetypes.guess_type(f.get("name", ""))
             if not mime:
                 continue
+            size = int(f.get("size") or 0)
+            if size and size > max_single_bytes:
+                errors.append({
+                    "name": f.get("name", ""),
+                    "mime": mime,
+                    "error": f"Ficheiro demasiado grande ({size} bytes)",
+                    "size": size,
+                })
+                continue
+            if max_total_bytes and size and (total_bytes + size > max_total_bytes):
+                continue
             try:
-                data = _download_drive_file(service, f["id"])
+                data = _download_drive_file_cached(f["id"], f.get("modifiedTime"))
+                if max_total_bytes and (total_bytes + len(data) > max_total_bytes):
+                    continue
                 url = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
                 items.append({
                     "url": url,
@@ -212,6 +260,9 @@ def _load_media_items():
                     "name": f.get("name", ""),
                     "mime": mime,
                 })
+                total_bytes += len(data)
+                if max_items and len(items) >= max_items:
+                    break
             except Exception as exc:
                 errors.append({
                     "name": f.get("name", ""),
@@ -279,6 +330,9 @@ if debug_enabled:
         st.write(f"Chaves em st.secrets: {list(st.secrets.keys())}")
         if "gdrive_folder_id" in st.secrets:
             st.write(f"gdrive_folder_id (raw): {st.secrets['gdrive_folder_id']}")
+        st.write(f"MAX_PRELOAD_ITEMS: {_get_int_setting('MAX_PRELOAD_ITEMS', DEFAULT_MAX_ITEMS)}")
+        st.write(f"MAX_TOTAL_MB: {_get_int_setting('MAX_TOTAL_MB', DEFAULT_MAX_TOTAL_MB)}")
+        st.write(f"MAX_SINGLE_MB: {_get_int_setting('MAX_SINGLE_MB', DEFAULT_MAX_SINGLE_MB)}")
         st.write(f"Itens carregados: {len(items)}")
         video_count = sum(1 for i in items if i.get("type") == "video")
         st.write(f"Vídeos detectados: {video_count}")
@@ -461,6 +515,10 @@ html = f"""
         background: #c98a6b;
       }}
 
+      button#next-order {{
+        background: #9a7d67;
+      }}
+
       .hint {{
         text-align: center;
         color: #6f655d;
@@ -503,6 +561,7 @@ html = f"""
       <div class="controls">
         <button id="play" type="button">Reproduzir</button>
         <button id="pause" type="button">Pausar</button>
+        <button id="next-order" type="button">Próximo</button>
         <button id="next" type="button">Próximo aleatório</button>
         <button id="sound" type="button">Ativar som</button>
       </div>
@@ -519,6 +578,7 @@ html = f"""
       const debugEl = document.getElementById("debug");
       const playBtn = document.getElementById("play");
       const pauseBtn = document.getElementById("pause");
+      const nextOrderBtn = document.getElementById("next-order");
       const nextBtn = document.getElementById("next");
       const soundBtn = document.getElementById("sound");
 
@@ -571,6 +631,12 @@ html = f"""
         }}
         currentIndex = idx;
         return items[idx];
+      }}
+
+      function pickNextOrdered() {{
+        if (!items.length) return null;
+        currentIndex = (currentIndex + 1) % items.length;
+        return items[currentIndex];
       }}
 
       function scheduleNext(delay) {{
@@ -627,6 +693,26 @@ html = f"""
         }}
       }}
 
+      function playNextOrdered() {{
+        const item = pickNextOrdered();
+        if (!item) return;
+        if (item.type === "video") {{
+          const mime = item.mime || "";
+          if (mime && video.canPlayType(mime) === "") {{
+            showHint("Vídeo não suportado pelo browser. Converte para MP4 (H.264).");
+            scheduleNext(1500);
+            return;
+          }}
+          playVideo(item);
+          if (debugEnabled) {{
+            const support = mime ? video.canPlayType(mime) : "sem mime";
+            showHint("Debug vídeo: " + (item.name || "sem nome") + " | mime=" + (mime || "n/a") + " | canPlayType=" + support);
+          }}
+        }} else {{
+          playImage(item.url);
+        }}
+      }}
+
       playBtn.addEventListener("click", () => {{
         if (!items.length) return;
         isPlaying = true;
@@ -646,6 +732,12 @@ html = f"""
         frame.classList.remove("playing");
         if (timer) window.clearTimeout(timer);
         video.pause();
+      }});
+
+      nextOrderBtn.addEventListener("click", () => {{
+        isPlaying = true;
+        frame.classList.add("playing");
+        playNextOrdered();
       }});
 
       nextBtn.addEventListener("click", () => {{
