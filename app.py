@@ -31,7 +31,7 @@ def _is_debug_media():
     return os.environ.get("DEBUG_MEDIA", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-st.set_page_config(page_title="Dia do Pai", layout="wide")
+st.set_page_config(page_title="Feliz dia do Pai!!!", layout="wide")
 
 st.markdown(
     """
@@ -202,7 +202,7 @@ html = f"""
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Dia do Pai</title>
+    <title>Feliz dia do Pai!!!</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" />
     <style>
       :root {{
@@ -415,7 +415,7 @@ html = f"""
         <img id="photo" alt="" />
         <video id="video" playsinline preload="auto"></video>
         <div class="overlay" id="overlay">
-          <h1>Dia do Pai</h1>
+          <h1>Feliz dia do Pai!!!</h1>
           <h3>19/03/2026</h3>
           <p>Memórias que passam ao acaso</p>
         </div>

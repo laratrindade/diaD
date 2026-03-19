@@ -1,4 +1,4 @@
-# Dia do Pai - Slideshow Streamlit
+# Feliz dia do Pai!!! - Slideshow Streamlit
 
 App em Streamlit que lê fotos e vídeos da pasta `media/` e reproduz aleatoriamente, mantendo a mesma estética e comportamento do site original.
 
